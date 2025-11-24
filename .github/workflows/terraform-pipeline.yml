@@ -88,7 +88,7 @@ jobs:
           subscription_id     = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           resource_group_name = "${{ needs.bootstrap.outputs.rg }}"
           key_vault_name      = "${{ needs.bootstrap.outputs.kv }}"
-          app_object_id       = "b2288382-af60-408b-9389-22ea420a94d9"
+          app_object_id       = "${{ secrets.APP_OBJECT_ID }}"
           EOF
 
       - name: Import existing Key Vault Access Policy if exists
