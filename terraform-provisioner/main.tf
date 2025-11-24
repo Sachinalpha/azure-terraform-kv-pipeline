@@ -3,12 +3,12 @@
 # Get current Azure client info
 data "azurerm_client_config" "current" {}
 
-# Reference existing Resource Group from Stage 1
+# Reference existing Resource Group
 data "azurerm_resource_group" "rg" {
   name = var.resource_group_name
 }
 
-# Reference existing Key Vault from Stage 1
+# Reference existing Key Vault
 data "azurerm_key_vault" "kv" {
   name                = var.key_vault_name
   resource_group_name = var.resource_group_name
@@ -26,7 +26,7 @@ resource "azurerm_virtual_network" "vnet" {
   }
 }
 
-# New Subnet for Private Endpoint
+# Subnet for Private Endpoint
 resource "azurerm_subnet" "pe_subnet" {
   name                 = "pe-subnet"
   resource_group_name  = var.resource_group_name
@@ -34,7 +34,7 @@ resource "azurerm_subnet" "pe_subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# Key Vault Access Policy (added SetRotationPolicy)
+# Key Vault Access Policy with SetRotationPolicy
 resource "azurerm_key_vault_access_policy" "policy" {
   key_vault_id = data.azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -91,3 +91,4 @@ resource "azurerm_private_endpoint" "kv_pe" {
     is_manual_connection           = false
   }
 }
+
