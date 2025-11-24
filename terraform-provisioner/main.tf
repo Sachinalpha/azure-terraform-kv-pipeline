@@ -14,7 +14,7 @@ data "azurerm_key_vault" "kv" {
   resource_group_name = var.resource_group_name
 }
 
-# Virtual Network (create if not exists)
+# Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = "${var.resource_group_name}-vnet"
   location            = data.azurerm_resource_group.rg.location
@@ -41,7 +41,7 @@ resource "azurerm_key_vault_access_policy" "policy" {
   object_id    = var.app_object_id
 
   secret_permissions = ["Get", "Set", "List"]
-  key_permissions    = [
+  key_permissions = [
     "Get",
     "Create",
     "Update",
@@ -58,7 +58,7 @@ resource "azurerm_key_vault_access_policy" "policy" {
   }
 }
 
-# Key Vault Key with rotation (depends on access policy)
+# Key Vault Key with rotation
 resource "azurerm_key_vault_key" "rotate" {
   depends_on = [azurerm_key_vault_access_policy.policy]
 
@@ -91,4 +91,3 @@ resource "azurerm_private_endpoint" "kv_pe" {
     is_manual_connection           = false
   }
 }
-
