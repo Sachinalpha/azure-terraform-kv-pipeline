@@ -20,7 +20,7 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 
-# 2. Subnet for Private Endpoint (removed unsupported argument)
+# 2. Subnet for Private Endpoint
 resource "azurerm_subnet" "private" {
   name                 = "private-subnet"
   resource_group_name  = var.resource_group_name
@@ -42,7 +42,7 @@ resource "azurerm_key_vault" "kv_update" {
   }
 }
 
-# 4. Access Policies (fixed capitalization)
+# 4. Access Policies
 resource "azurerm_key_vault_access_policy" "policy" {
   key_vault_id = data.azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -51,7 +51,7 @@ resource "azurerm_key_vault_access_policy" "policy" {
   secret_permissions = ["Get", "Set", "List"]
 }
 
-# 5. Key Rotation Policy (added key_opts)
+# 5. Key Rotation Policy
 resource "azurerm_key_vault_key" "rotate" {
   name         = "app-key"
   key_vault_id = data.azurerm_key_vault.kv.id
@@ -66,7 +66,7 @@ resource "azurerm_key_vault_key" "rotate" {
   }
 }
 
-# 6. Private Endpoint
+# 6. Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv_pe" {
   name                = "${var.key_vault_name}-pe"
   location            = data.azurerm_resource_group.rg.location
@@ -77,7 +77,9 @@ resource "azurerm_private_endpoint" "kv_pe" {
     name                           = "kvprivatelink"
     private_connection_resource_id = data.azurerm_key_vault.kv.id
     subresource_names              = ["vault"]
+    is_manual_connection           = false
   }
 }
+
 
 
