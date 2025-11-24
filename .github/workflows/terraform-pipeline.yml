@@ -93,13 +93,11 @@ jobs:
           OBJ="b2288382-af60-408b-9389-22ea420a94d9"
           KEY_NAME="app-key"
 
-          # Import access policy
           POLICY_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME/objectId/$OBJ"
           if ! terraform state list | grep -q "azurerm_key_vault_access_policy.policy"; then
             terraform import azurerm_key_vault_access_policy.policy "$POLICY_ID"
           fi
 
-          # Import key
           KEY_ID=$(az keyvault key show --vault-name $KV_NAME --name $KEY_NAME --query "id" -o tsv)
           if ! terraform state list | grep -q "azurerm_key_vault_key.rotate"; then
             terraform import azurerm_key_vault_key.rotate "$KEY_ID"
@@ -108,4 +106,3 @@ jobs:
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
         run: terraform apply -auto-approve
-
