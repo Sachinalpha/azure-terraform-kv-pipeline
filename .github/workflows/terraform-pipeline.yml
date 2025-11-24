@@ -5,40 +5,44 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   bootstrap:
     name: Bootstrap RG + Key Vault
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          auth-type: service-principal
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-    - name: Terraform Init (bootstrap)
-      working-directory: terraform-bootstrap
-      run: terraform init
+      - name: Terraform Init (bootstrap)
+        working-directory: terraform-bootstrap
+        run: terraform init
 
-    - name: Terraform Apply (bootstrap)
-      working-directory: terraform-bootstrap
-      run: terraform apply -auto-approve
+      - name: Terraform Apply (bootstrap)
+        working-directory: terraform-bootstrap
+        run: terraform apply -auto-approve
 
-    - name: Capture outputs
-      id: tfoutputs
-      working-directory: terraform-bootstrap
-      run: |
-        echo "rg=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-        echo "kv=$(terraform output -raw key_vault_name)" >> $GITHUB_OUTPUT
+      - name: Capture outputs
+        id: tfoutputs
+        working-directory: terraform-bootstrap
+        run: |
+          echo "rg=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "kv=$(terraform output -raw key_vault_name)" >> $GITHUB_OUTPUT
 
   provisioner:
     name: Provision Key Vault settings
@@ -46,33 +50,34 @@ jobs:
     needs: bootstrap
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          auth-type: service-principal
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-    - name: Terraform Init (provisioner)
-      working-directory: terraform-provisioner
-      run: terraform init
+      - name: Terraform Init (provisioner)
+        working-directory: terraform-provisioner
+        run: terraform init
 
-    - name: Pass outputs from Stage 1
-      working-directory: terraform-provisioner
-      run: |
-        cat << EOF > tf.auto.tfvars
-        resource_group_name = "${{ needs.bootstrap.outputs.rg }}"
-        key_vault_name      = "${{ needs.bootstrap.outputs.kv }}"
-        app_object_id       = "b2288382-af60-408b-9389-22ea420a94d9"
-        EOF
+      - name: Pass outputs from Stage 1
+        working-directory: terraform-provisioner
+        run: |
+          cat << EOF > tf.auto.tfvars
+          resource_group_name = "${{ needs.bootstrap.outputs.rg }}"
+          key_vault_name      = "${{ needs.bootstrap.outputs.kv }}"
+          app_object_id       = "b2288382-af60-408b-9389-22ea420a94d9"
+          EOF
 
-    - name: Terraform Apply (provisioner)
-      working-directory: terraform-provisioner
-      run: terraform apply -auto-approve
+      - name: Terraform Apply (provisioner)
+        working-directory: terraform-provisioner
+        run: terraform apply -auto-approve
