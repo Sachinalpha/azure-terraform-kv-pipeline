@@ -1,6 +1,6 @@
 variable "resource_group_name" {
   type    = string
-  default = "poc-rg321"
+  default = "poc2-rg321"
 }
 
 variable "location" {
