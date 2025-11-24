@@ -16,7 +16,7 @@ data "azurerm_key_vault" "kv" {
   resource_group_name = var.resource_group_name
 }
 
-# 4️⃣ Virtual Network
+# 4️⃣ Virtual Network (create if not exists)
 resource "azurerm_virtual_network" "vnet" {
   name                = "${var.resource_group_name}-vnet"
   location            = data.azurerm_resource_group.rg.location
@@ -28,19 +28,19 @@ resource "azurerm_virtual_network" "vnet" {
   }
 }
 
-# 5️⃣ Subnet for Private Endpoint
-resource "azurerm_subnet" "private" {
-  name                 = "private-subnet"
+# 5️⃣ New Subnet for Private Endpoint
+# ✅ This subnet is new and allows private endpoints
+resource "azurerm_subnet" "pe_subnet" {
+  name                 = "pe-subnet"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
 
-  # Required for Private Endpoint
+  # Must disable network policies for private endpoints
   private_endpoint_network_policies_enabled = false
 }
 
 # 6️⃣ Key Vault Access Policy
-#    - Use 'lifecycle' to avoid destroying existing policies
 resource "azurerm_key_vault_access_policy" "policy" {
   key_vault_id = data.azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -54,8 +54,7 @@ resource "azurerm_key_vault_access_policy" "policy" {
   }
 }
 
-# 7️⃣ Key Vault Key with rotation
-#    - Ensure key is created only after access policy is applied
+# 7️⃣ Key Vault Key with rotation (depends on access policy)
 resource "azurerm_key_vault_key" "rotate" {
   depends_on = [azurerm_key_vault_access_policy.policy]
 
@@ -72,12 +71,14 @@ resource "azurerm_key_vault_key" "rotate" {
   }
 }
 
-#  Private Endpoint for Key Vault
+# 8️⃣ Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv_pe" {
+  depends_on = [azurerm_subnet.pe_subnet]
+
   name                = "${var.key_vault_name}-pe"
   location            = data.azurerm_resource_group.rg.location
   resource_group_name = var.resource_group_name
-  subnet_id           = azurerm_subnet.private.id
+  subnet_id           = azurerm_subnet.pe_subnet.id
 
   private_service_connection {
     name                           = "kvprivatelink"
@@ -86,8 +87,3 @@ resource "azurerm_private_endpoint" "kv_pe" {
     is_manual_connection           = false
   }
 }
-
-
-
-
-
