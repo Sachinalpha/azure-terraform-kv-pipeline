@@ -58,26 +58,26 @@ jobs:
     name: Provision Key Vault Settings
     runs-on: ubuntu-latest
     needs: bootstrap
-
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+  
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           auth-type: SERVICE_PRINCIPAL
-
+  
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.0
-
+  
       - name: Terraform Init (provisioner)
         working-directory: terraform-provisioner
         run: terraform init -upgrade
-
+  
       - name: Pass Azure credentials and bootstrap outputs
         working-directory: terraform-provisioner
         run: |
@@ -90,7 +90,7 @@ jobs:
           key_vault_name      = "${{ needs.bootstrap.outputs.kv }}"
           app_object_id       = "${{ secrets.APP_OBJECT_ID }}"
           EOF
-
+  
       - name: Import existing Key Vault Access Policy if exists
         working-directory: terraform-provisioner
         run: |
@@ -98,28 +98,27 @@ jobs:
           if terraform state list | grep -q azurerm_key_vault_access_policy.policy; then
             echo "Access Policy already in state"
           else
-            terraform import azurerm_key_vault_access_policy.policy "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/objectId/${{ secrets.APP_OBJECT_ID }}"
+            # Attempt import, ignore failure if policy does not exist
+            terraform import azurerm_key_vault_access_policy.policy "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/objectId/${{ secrets.APP_OBJECT_ID }}" || echo "Access Policy not found, will be created by Terraform apply"
           fi
-
-      - name: Import existing Key Vault Key if it exists
+  
+      - name: Import existing Key Vault Key if exists
         working-directory: terraform-provisioner
         run: |
-          # Get the latest key version from Azure Key Vault
-          KEY_VERSION=$(az keyvault key show \
-            --vault-name "${{ needs.bootstrap.outputs.kv }}" \
-            --name "app-key" \
-            --query "key.kid" -o tsv | awk -F/ '{print $NF}')
-          
-          if [ -n "$KEY_VERSION" ]; then
-            echo "Found existing key version: $KEY_VERSION. Importing..."
-            terraform import azurerm_key_vault_key.rotate "https://${{ needs.bootstrap.outputs.kv }}.vault.azure.net/keys/app-key/$KEY_VERSION"
+          set -e
+          if terraform state list | grep -q azurerm_key_vault_key.rotate; then
+            echo "Key already in state"
           else
-            echo "Key not found, will be created"
+            # Attempt import, ignore failure if key does not exist
+            # Use full key version if available or just key name
+            KEY_ID=$(az keyvault key show --vault-name "${{ needs.bootstrap.outputs.kv }}" --name "app-key" --query "id" -o tsv || echo "")
+            if [ -n "$KEY_ID" ]; then
+              terraform import azurerm_key_vault_key.rotate "$KEY_ID"
+            else
+              echo "Key not found, will be created by Terraform apply"
+            fi
           fi
-
-
-
+  
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
         run: terraform apply -auto-approve
-
