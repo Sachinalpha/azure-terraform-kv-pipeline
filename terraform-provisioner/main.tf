@@ -49,8 +49,7 @@ resource "azurerm_key_vault_access_policy" "policy" {
   lifecycle {
     prevent_destroy = true
     ignore_changes = [
-      secret_permissions,
-      key_permissions
+      secret_permissions
     ]
   }
 }
