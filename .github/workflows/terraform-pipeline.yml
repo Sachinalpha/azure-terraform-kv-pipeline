@@ -9,8 +9,6 @@ permissions:
   contents: read
 
 jobs:
-
-  # bootstrap job to create resource group and key vault
   bootstrap:
     name: Bootstrap RG + Key Vault
     runs-on: ubuntu-latest
@@ -53,8 +51,6 @@ jobs:
           echo "rg=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
           echo "kv=$(terraform output -raw key_vault_name)" >> $GITHUB_OUTPUT
 
-
-  # provisioner job to configure key vault access policy and key rotation
   provisioner:
     name: Provision Key Vault Settings
     runs-on: ubuntu-latest
@@ -89,20 +85,27 @@ jobs:
           app_object_id      = "b2288382-af60-408b-9389-22ea420a94d9"
           EOF
 
-      # import existing Key Vault access policy if missing
-      - name: Import Key Vault Access Policy if missing
+      - name: Import existing Key Vault resources if missing
         working-directory: terraform-provisioner
         run: |
-          SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          KV_NAME="${{ needs.bootstrap.outputs.kv }}"
           RG="${{ needs.bootstrap.outputs.rg }}"
-          KV="${{ needs.bootstrap.outputs.kv }}"
           OBJ="b2288382-af60-408b-9389-22ea420a94d9"
-          ID="/subscriptions/$SUB/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV/objectId/$OBJ"
+          KEY_NAME="app-key"
 
+          # Import access policy
+          POLICY_ID="/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/$RG/providers/Microsoft.KeyVault/vaults/$KV_NAME/objectId/$OBJ"
           if ! terraform state list | grep -q "azurerm_key_vault_access_policy.policy"; then
-            terraform import azurerm_key_vault_access_policy.policy "$ID"
+            terraform import azurerm_key_vault_access_policy.policy "$POLICY_ID"
+          fi
+
+          # Import key
+          KEY_ID=$(az keyvault key show --vault-name $KV_NAME --name $KEY_NAME --query "id" -o tsv)
+          if ! terraform state list | grep -q "azurerm_key_vault_key.rotate"; then
+            terraform import azurerm_key_vault_key.rotate "$KEY_ID"
           fi
 
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
         run: terraform apply -auto-approve
+
