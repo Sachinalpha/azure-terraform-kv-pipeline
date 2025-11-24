@@ -94,12 +94,22 @@ jobs:
       - name: Import existing Key Vault Access Policy if exists
         working-directory: terraform-provisioner
         run: |
-          terraform import -allow-missing azurerm_key_vault_access_policy.policy "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/objectId/${{ secrets.APP_OBJECT_ID }}" || echo "Access Policy not found, will be created"
+          set -e
+          if terraform state list | grep -q azurerm_key_vault_access_policy.policy; then
+            echo "Access Policy already in state"
+          else
+            terraform import azurerm_key_vault_access_policy.policy "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/objectId/${{ secrets.APP_OBJECT_ID }}"
+          fi
 
       - name: Import existing Key Vault Key if it exists
         working-directory: terraform-provisioner
         run: |
-          terraform import -allow-missing azurerm_key_vault_key.rotate "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/keys/app-key" || echo "Key not found, will be created"
+          set -e
+          if terraform state list | grep -q azurerm_key_vault_key.rotate; then
+            echo "Key already in state"
+          else
+            terraform import azurerm_key_vault_key.rotate "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/keys/app-key"
+          fi
 
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
