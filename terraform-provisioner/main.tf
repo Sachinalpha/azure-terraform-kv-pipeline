@@ -1,20 +1,14 @@
-# Stage 2: Provisioner - main.tf
-
-# Get current Azure client info
 data "azurerm_client_config" "current" {}
 
-# Reference existing Resource Group
 data "azurerm_resource_group" "rg" {
   name = var.resource_group_name
 }
 
-# Reference existing Key Vault
 data "azurerm_key_vault" "kv" {
   name                = var.key_vault_name
   resource_group_name = var.resource_group_name
 }
 
-# Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = "${var.resource_group_name}-vnet"
   location            = data.azurerm_resource_group.rg.location
@@ -26,7 +20,6 @@ resource "azurerm_virtual_network" "vnet" {
   }
 }
 
-# Subnet for Private Endpoint
 resource "azurerm_subnet" "pe_subnet" {
   name                 = "pe-subnet"
   resource_group_name  = var.resource_group_name
@@ -34,7 +27,6 @@ resource "azurerm_subnet" "pe_subnet" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# Key Vault Access Policy with SetRotationPolicy
 resource "azurerm_key_vault_access_policy" "policy" {
   key_vault_id = data.azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -55,10 +47,13 @@ resource "azurerm_key_vault_access_policy" "policy" {
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = [
+      secret_permissions,
+      key_permissions
+    ]
   }
 }
 
-# Key Vault Key with rotation
 resource "azurerm_key_vault_key" "rotate" {
   depends_on = [azurerm_key_vault_access_policy.policy]
 
@@ -73,9 +68,17 @@ resource "azurerm_key_vault_key" "rotate" {
       time_after_creation = "P30D"
     }
   }
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      rotation_policy,
+      key_opts,
+      key_size
+    ]
+  }
 }
 
-# Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv_pe" {
   depends_on = [azurerm_subnet.pe_subnet]
 
