@@ -108,8 +108,9 @@ jobs:
           if terraform state list | grep -q azurerm_key_vault_key.rotate; then
             echo "Key already in state"
           else
-            terraform import azurerm_key_vault_key.rotate "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ needs.bootstrap.outputs.rg }}/providers/Microsoft.KeyVault/vaults/${{ needs.bootstrap.outputs.kv }}/keys/app-key"
+            terraform import azurerm_key_vault_key.rotate "https://$(echo ${{ needs.bootstrap.outputs.kv }}).vault.azure.net/keys/app-key"
           fi
+
 
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
