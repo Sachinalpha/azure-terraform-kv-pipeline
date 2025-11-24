@@ -9,12 +9,13 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: Setup Environment
+  bootstrap:
+    name: Bootstrap RG + Key Vault
     runs-on: ubuntu-latest
     outputs:
       rg: ${{ steps.capture.outputs.rg }}
       kv: ${{ steps.capture.outputs.kv }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,6 +33,16 @@ jobs:
         working-directory: terraform-bootstrap
         run: terraform init
 
+      - name: Pass Azure credentials to Terraform
+        working-directory: terraform-bootstrap
+        run: |
+          cat << EOF > tf.auto.tfvars
+          client_id       = "${{ secrets.AZURE_CLIENT_ID }}"
+          client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"
+          subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          EOF
+
       - name: Terraform Apply (bootstrap)
         working-directory: terraform-bootstrap
         run: terraform apply -auto-approve
@@ -46,28 +57,40 @@ jobs:
   provisioner:
     name: Provision Key Vault Settings
     runs-on: ubuntu-latest
-    needs: setup
+    needs: bootstrap
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reuse Azure Login and Terraform
-        run: echo "Azure login and Terraform already configured in previous job"
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          auth-type: SERVICE_PRINCIPAL
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init (provisioner)
         working-directory: terraform-provisioner
         run: terraform init
 
-      - name: Pass outputs from bootstrap
+      - name: Pass Azure credentials and bootstrap outputs
         working-directory: terraform-provisioner
         run: |
           cat << EOF > tf.auto.tfvars
-          resource_group_name = "${{ needs.setup.outputs.rg }}"
-          key_vault_name      = "${{ needs.setup.outputs.kv }}"
+          client_id       = "${{ secrets.AZURE_CLIENT_ID }}"
+          client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"
+          subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          resource_group_name = "${{ needs.bootstrap.outputs.rg }}"
+          key_vault_name      = "${{ needs.bootstrap.outputs.kv }}"
           app_object_id       = "b2288382-af60-408b-9389-22ea420a94d9"
           EOF
 
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
         run: terraform apply -auto-approve
+
 
