@@ -71,10 +71,12 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
 
       - name: Terraform Init (provisioner)
         working-directory: terraform-provisioner
-        run: terraform init
+        run: terraform init -upgrade
 
       - name: Pass Azure credentials and bootstrap outputs
         working-directory: terraform-provisioner
