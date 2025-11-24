@@ -36,7 +36,7 @@ resource "azurerm_subnet" "private" {
   address_prefixes     = ["10.0.1.0/24"]
 
   # Required for Private Endpoint
-  private_endpoint_network_policies_enabled = false
+  enforce_private_link_endpoint_network_policies = false
 }
 
 # 6️⃣ Key Vault Access Policy
