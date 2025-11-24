@@ -89,8 +89,8 @@ jobs:
           app_object_id      = "b2288382-af60-408b-9389-22ea420a94d9"
           EOF
 
-      # ensure key vault access policy exists and includes SetRotationPolicy permission
-      - name: Ensure Key Vault Access Policy
+      # import existing Key Vault access policy if missing
+      - name: Import Key Vault Access Policy if missing
         working-directory: terraform-provisioner
         run: |
           SUB="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
@@ -103,20 +103,6 @@ jobs:
             terraform import azurerm_key_vault_access_policy.policy "$ID"
           fi
 
-          cat << EOF > ensure_policy.tf
-          resource "azurerm_key_vault_access_policy" "policy" {
-            key_vault_id = data.azurerm_key_vault.kv.id
-            tenant_id    = data.azurerm_client_config.current.tenant_id
-            object_id    = var.app_object_id
-            secret_permissions = ["Get","Set","List"]
-            key_permissions    = ["Get","Create","Update","Delete","Sign","Verify","WrapKey","UnwrapKey","SetRotationPolicy"]
-          }
-          EOF
-
-          terraform apply -auto-approve
-          rm ensure_policy.tf
-
       - name: Terraform Apply (provisioner)
         working-directory: terraform-provisioner
         run: terraform apply -auto-approve
-
