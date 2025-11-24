@@ -104,12 +104,19 @@ jobs:
       - name: Import existing Key Vault Key if it exists
         working-directory: terraform-provisioner
         run: |
-          set -e
-          if terraform state list | grep -q azurerm_key_vault_key.rotate; then
-            echo "Key already in state"
+          # Get the latest key version from Azure Key Vault
+          KEY_VERSION=$(az keyvault key show \
+            --vault-name "${{ needs.bootstrap.outputs.kv }}" \
+            --name "app-key" \
+            --query "key.kid" -o tsv | awk -F/ '{print $NF}')
+          
+          if [ -n "$KEY_VERSION" ]; then
+            echo "Found existing key version: $KEY_VERSION. Importing..."
+            terraform import azurerm_key_vault_key.rotate "https://${{ needs.bootstrap.outputs.kv }}.vault.azure.net/keys/app-key/$KEY_VERSION"
           else
-            terraform import azurerm_key_vault_key.rotate "https://$(echo ${{ needs.bootstrap.outputs.kv }}).vault.azure.net/keys/app-key"
+            echo "Key not found, will be created"
           fi
+
 
 
       - name: Terraform Apply (provisioner)
