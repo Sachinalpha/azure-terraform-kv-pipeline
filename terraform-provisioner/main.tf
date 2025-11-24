@@ -1,18 +1,18 @@
-# Get current Azure client info
+# 1. Get current Azure client info
 data "azurerm_client_config" "current" {}
 
-# Existing resource group
+# 2. Reference existing Resource Group
 data "azurerm_resource_group" "rg" {
   name = var.resource_group_name
 }
 
-# Existing Key Vault
+# 3. Reference existing Key Vault created in Stage 1
 data "azurerm_key_vault" "kv" {
   name                = var.key_vault_name
   resource_group_name = var.resource_group_name
 }
 
-# 1. Virtual Network
+# 4. Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = "${var.resource_group_name}-vnet"
   location            = data.azurerm_resource_group.rg.location
@@ -20,7 +20,7 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 
-# 2. Subnet for Private Endpoint
+# 5. Subnet for Private Endpoint
 resource "azurerm_subnet" "private" {
   name                 = "private-subnet"
   resource_group_name  = var.resource_group_name
@@ -28,30 +28,18 @@ resource "azurerm_subnet" "private" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# 3. Update Key Vault (tags)
-resource "azurerm_key_vault" "kv_update" {
-  name                = data.azurerm_key_vault.kv.name
-  location            = data.azurerm_resource_group.rg.location
-  resource_group_name = var.resource_group_name
-  tenant_id           = data.azurerm_client_config.current.tenant_id
-  sku_name            = "standard"
-
-  tags = {
-    environment = "prod"
-    owner       = "platform-team"
-  }
-}
-
-# 4. Access Policies
+# 6. Key Vault Access Policies for your App
 resource "azurerm_key_vault_access_policy" "policy" {
   key_vault_id = data.azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
   object_id    = var.app_object_id
 
+  # Add both secret and key permissions
   secret_permissions = ["Get", "Set", "List"]
+  key_permissions    = ["Get", "Create", "Update", "Delete", "Sign", "Verify", "WrapKey", "UnwrapKey"]
 }
 
-# 5. Key Rotation Policy
+# 7. Key Vault Key with rotation
 resource "azurerm_key_vault_key" "rotate" {
   name         = "app-key"
   key_vault_id = data.azurerm_key_vault.kv.id
@@ -66,7 +54,7 @@ resource "azurerm_key_vault_key" "rotate" {
   }
 }
 
-# 6. Private Endpoint for Key Vault
+# 8. Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv_pe" {
   name                = "${var.key_vault_name}-pe"
   location            = data.azurerm_resource_group.rg.location
@@ -80,6 +68,7 @@ resource "azurerm_private_endpoint" "kv_pe" {
     is_manual_connection           = false
   }
 }
+
 
 
 
