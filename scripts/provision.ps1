@@ -124,7 +124,7 @@ if (-not $existingPE) {
     New-AzPrivateEndpoint -Name $peName `
                           -ResourceGroupName $ResourceGroupName `
                           -Location $rg.Location `
-                          -SubnetId $subnet.Id `
+                          -Subnet $subnet `
                           -PrivateLinkServiceConnection @(@{
                               Name = "kvprivatelink"
                               PrivateLinkServiceId = $kv.ResourceId
