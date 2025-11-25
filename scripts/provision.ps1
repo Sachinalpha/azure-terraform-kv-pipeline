@@ -118,13 +118,17 @@ $existingPE = Get-AzPrivateEndpoint -Name $peName `
 
 if (-not $existingPE) {
     Write-Host "Creating Private Endpoint $peName..."
-    $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet
+   # $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet
+   # Write-Host "$subnet"
+    $virtualNetwork = Get-AzVirtualNetwork -ResourceName $vnetName -ResourceGroupName  $ResourceGroupName
+    $subnet = $virtualNetwork | Select-Object -ExpandProperty subnets | Where-Object Name -eq $subnetName
+
     Write-Host "$subnet"
-    
+    Write-Host "$virtualNetwork"
     New-AzPrivateEndpoint -Name $peName `
                           -ResourceGroupName $ResourceGroupName `
                           -Location $rg.Location `
-                          -Subnet $subnetName `
+                          -Subnet $subnet `
                           -PrivateLinkServiceConnection @(@{
                               Name = "kvprivatelink"
                               PrivateLinkServiceId = $kv.ResourceId
