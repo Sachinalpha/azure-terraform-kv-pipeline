@@ -119,7 +119,8 @@ $existingPE = Get-AzPrivateEndpoint -Name $peName `
 if (-not $existingPE) {
     Write-Host "Creating Private Endpoint $peName..."
     $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet
-
+    Write-Host "$subnet"
+    
     New-AzPrivateEndpoint -Name $peName `
                           -ResourceGroupName $ResourceGroupName `
                           -Location $rg.Location `
