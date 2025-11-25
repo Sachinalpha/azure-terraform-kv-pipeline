@@ -68,7 +68,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           auth-type: SERVICE_PRINCIPAL
-
+          
+      - name: Install Az Module
+        shell: pwsh
+        run: |
+          Install-Module -Name Az -Scope CurrentUser -Force -AllowClobber
+          Import-Module Az
+          
       - name: Run PowerShell provisioning
         shell: pwsh
         run: |
