@@ -9,41 +9,36 @@ param(
     [string]$AppObjectId
 )
 
-# -----------------------------
-# Install Az module if missing
-# -----------------------------
+# Install Az if missing
 if (-not (Get-Module -ListAvailable -Name Az)) {
     Install-Module -Name Az -Scope CurrentUser -Force -AllowClobber
 }
 Import-Module Az
 
-# -----------------------------
-# Login using service principal
-# -----------------------------
+# Login with Service Principal
 $securePassword = ConvertTo-SecureString $env:AZURE_CLIENT_SECRET -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential ($env:AZURE_CLIENT_ID, $securePassword)
-Connect-AzAccount -ServicePrincipal -Tenant $env:AZURE_TENANT_ID -Credential $cred
 
-# Select the subscription
+Connect-AzAccount -ServicePrincipal `
+    -Tenant $env:AZURE_TENANT_ID `
+    -Credential $cred
+
 Select-AzSubscription -SubscriptionId $env:AZURE_SUBSCRIPTION_ID
 
-# -----------------------------
-# Retry helper function
-# -----------------------------
+# Retry Helper
 function Retry-AzGetResourceGroup {
-    param([string]$Name, [int]$MaxAttempts=5, [int]$Delay=10)
-    for ($i=0; $i -lt $MaxAttempts; $i++) {
+    param([string]$Name, [int]$MaxAttempts=10, [int]$Delay=5)
+
+    for ($i=1; $i -le $MaxAttempts; $i++) {
         $rg = Get-AzResourceGroup -Name $Name -ErrorAction SilentlyContinue
         if ($rg) { return $rg }
-        Write-Host "Resource Group '$Name' not found. Retrying in $Delay seconds..."
+        Write-Host "[$i/$MaxAttempts] Resource Group '$Name' not found. Retrying in $Delay sec..."
         Start-Sleep -Seconds $Delay
     }
     return $null
 }
 
-# -----------------------------
 # Check Resource Group
-# -----------------------------
 $rg = Retry-AzGetResourceGroup -Name $ResourceGroupName
 if (-not $rg) {
     Write-Host "Resource Group '$ResourceGroupName' does not exist after retries!"
@@ -51,27 +46,36 @@ if (-not $rg) {
 }
 Write-Host "Resource Group exists: $($rg.ResourceGroupName)"
 
-# -----------------------------
 # Check Key Vault
-# -----------------------------
-$kv = Get-AzKeyVault -VaultName $KeyVaultName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
+$kv = Get-AzKeyVault -VaultName $KeyVaultName `
+                     -ResourceGroupName $ResourceGroupName `
+                     -ErrorAction SilentlyContinue
+
 if (-not $kv) {
     Write-Host "Key Vault '$KeyVaultName' does not exist!"
     exit 1
 }
+Write-Host "Key Vault exists: $KeyVaultName"
 
-# -----------------------------
-# Key Vault Access Policy
-# -----------------------------
+# Key Vault Access Policy (Bypass Graph)
+Write-Host "Setting Access Policy (bypassing validation)..."
+
 Set-AzKeyVaultAccessPolicy -VaultName $KeyVaultName `
                            -ObjectId $AppObjectId `
                            -PermissionsToSecrets @("Get","Set","List") `
-                           -PermissionsToKeys @("Get","Create","Update","Delete","Sign","Verify","WrapKey","UnwrapKey","SetRotationPolicy","GetRotationPolicy")
+                           -PermissionsToKeys @(
+                               "Get","Create","Update","Delete",
+                               "Sign","Verify","WrapKey","UnwrapKey",
+                               "SetRotationPolicy","GetRotationPolicy"
+                           ) `
+                           -BypassObjectIdValidation `
+                           -ErrorAction Stop
 
-# -----------------------------
-# Key Vault Key Creation / Rotation
-# -----------------------------
+Write-Host "Access policy applied"
+
+# Key Creation
 $key = Get-AzKeyVaultKey -VaultName $KeyVaultName -Name "app-key" -ErrorAction SilentlyContinue
+
 if (-not $key) {
     Write-Host "Creating Key Vault key 'app-key'..."
     Add-AzKeyVaultKey -VaultName $KeyVaultName -Name "app-key" `
@@ -83,35 +87,39 @@ if (-not $key) {
     Write-Host "Key 'app-key' already exists."
 }
 
-# -----------------------------
-# Virtual Network
-# -----------------------------
+# VNet Creation
 $vnetName = "${ResourceGroupName}-vnet"
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
+
 if (-not $vnet) {
-    Write-Host "Creating Virtual Network $vnetName..."
-    $vnet = New-AzVirtualNetwork -Name $vnetName -ResourceGroupName $ResourceGroupName `
-                                 -Location $rg.Location -AddressPrefix "10.0.0.0/16"
+    Write-Host "Creating VNet $vnetName..."
+    $vnet = New-AzVirtualNetwork -Name $vnetName `
+                                 -ResourceGroupName $ResourceGroupName `
+                                 -Location $rg.Location `
+                                 -AddressPrefix "10.0.0.0/16"
 }
 
-# -----------------------------
 # Subnet
-# -----------------------------
 $subnetName = "pe-subnet"
 $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet -ErrorAction SilentlyContinue
+
 if (-not $subnet) {
     Write-Host "Creating Subnet $subnetName..."
-    Add-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet | Set-AzVirtualNetwork
+    Add-AzVirtualNetworkSubnetConfig -Name $subnetName `
+                                     -AddressPrefix "10.0.1.0/24" `
+                                     -VirtualNetwork $vnet | Set-AzVirtualNetwork
 }
 
-# -----------------------------
-# Private Endpoint for Key Vault
-# -----------------------------
+# Private Endpoint
 $peName = "${KeyVaultName}-pe"
-$existingPE = Get-AzPrivateEndpoint -Name $peName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
+$existingPE = Get-AzPrivateEndpoint -Name $peName `
+                                    -ResourceGroupName $ResourceGroupName `
+                                    -ErrorAction SilentlyContinue
+
 if (-not $existingPE) {
     Write-Host "Creating Private Endpoint $peName..."
     $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet
+
     New-AzPrivateEndpoint -Name $peName `
                           -ResourceGroupName $ResourceGroupName `
                           -Location $rg.Location `
@@ -125,3 +133,5 @@ if (-not $existingPE) {
 } else {
     Write-Host "Private Endpoint $peName already exists."
 }
+
+Write-Host "All provisioning steps completed successfully."
