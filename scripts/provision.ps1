@@ -88,13 +88,11 @@ if (-not $key) {
 }
 
 # --- Rotation Policy ---
-$keyRotationPolicy = New-AzKeyVaultKeyRotationPolicy `
-    -ExpiresIn "P90D" `
-    -NotifyBeforeExpiry "P30D"
 
 Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName `
                                 -Name "app-key" `
-                                -RotationPolicy $keyRotationPolicy
+                                -ExpiresIn "P90D" `
+                                -NotifyBeforeExpiry "P30D"
 
 Write-Host "Rotation policy applied for 'app-key'"
 
