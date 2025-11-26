@@ -87,6 +87,17 @@ if (-not $key) {
     Write-Host "Key 'app-key' already exists."
 }
 
+# --- Rotation Policy ---
+$keyRotationPolicy = New-AzKeyVaultKeyRotationPolicy `
+    -ExpiresIn "P90D" `
+    -NotifyBeforeExpiry "P30D"
+
+Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName `
+                                -Name "app-key" `
+                                -RotationPolicy $keyRotationPolicy
+
+Write-Host "Rotation policy applied for 'app-key'"
+
 # VNet Creation
 $vnetName = "${ResourceGroupName}-vnet"
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
