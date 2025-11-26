@@ -88,12 +88,7 @@ if (-not $key) {
 }
 
 # --- Rotation Policy ---
-
-Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName `
-                                -Name "app-key" `
-                                -ExpiresIn "P90D" `
-                                -NotifyBeforeExpiry "P30D"
-
+Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName -Name "app-key" -ExpiresIn "P90D"
 Write-Host "Rotation policy applied for 'app-key'"
 
 # VNet Creation
