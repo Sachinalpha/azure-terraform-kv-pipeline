@@ -87,6 +87,39 @@ if (-not $key) {
     Write-Host "Key 'app-key' already exists."
 }
 
+#Add Tags
+# Check existing tags
+$kv = Get-AzKeyVault -VaultName $KeyVaultName
+
+if ($kv.Tags.Count -eq 0 -or $kv.Tags["env"] -ne "prod") {
+    Write-Host "Applying tags to Key Vault '$KeyVaultName'..."
+
+    Set-AzResource -ResourceType "Microsoft.KeyVault/vaults" `
+                   -ResourceGroupName $kv.ResourceGroupName `
+                   -Name $KeyVaultName `
+                   -Tag @{ env="prod"; owner="teamA" } `
+                   -Force
+}
+else {
+    Write-Host "Key Vault '$KeyVaultName' already has tags."
+}
+
+#Add secrets
+$secretName = "app-secret"
+$existingSecret = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name $secretName -ErrorAction SilentlyContinue
+
+if (-not $existingSecret) {
+    Write-Host "Creating secret '$secretName'..."
+
+    Set-AzKeyVaultSecret -VaultName $KeyVaultName `
+                         -Name $secretName `
+                         -SecretValue (ConvertTo-SecureString "MySecretValue123" -AsPlainText -Force)
+}
+else {
+    Write-Host "Secret '$secretName' already exists."
+}
+
+
 # # --- Rotation Policy ---
 Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName -Name "app-key" -ExpiresIn "P90D"
 Write-Host "Rotation policy applied for 'app-key'"
