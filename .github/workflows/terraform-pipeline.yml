@@ -1,9 +1,24 @@
 name: Terraform Pipeline
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      resource_group_name:
+        description: "Resource Group name"
+        required: false
+        type: string
+      key_vault_name:
+        description: "Key Vault name"
+        required: false
+        type: string
+      key_name:
+        description: "Key name to configure in Key Vault"
+        required: false
+        type: string
+      secret_name:
+        description: "Secret name to configure in Key Vault"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -74,30 +89,53 @@ jobs:
         run: |
           Install-Module -Name Az -Scope CurrentUser -Force -AllowClobber
           Import-Module Az
-  
-      - name: Debug captured outputs
+
+      - name: Debug inputs + outputs
         shell: pwsh
         run: |
-          Write-Host "Captured RG: '${{ needs.bootstrap.outputs.rg }}'"
-          Write-Host "Captured KV: '${{ needs.bootstrap.outputs.kv }}'"
-  
+          Write-Host "User RG Input: '${{ github.event.inputs.resource_group_name }}'"
+          Write-Host "User KV Input: '${{ github.event.inputs.key_vault_name }}'"
+          Write-Host "Captured RG Output: '${{ needs.bootstrap.outputs.rg }}'"
+          Write-Host "Captured KV Output: '${{ needs.bootstrap.outputs.kv }}'"
+
       - name: Run PowerShell provisioning
         shell: pwsh
         run: |
-          # Variables with trimming
-          $ResourceGroupName = "${{ needs.bootstrap.outputs.rg }}".Trim()
-          $KeyVaultName      = "${{ needs.bootstrap.outputs.kv }}".Trim()
-          $AppObjectId       = "${{ secrets.APP_OBJECT_ID }}"
-  
-          # Fail early if null
+          # Use user-input overrides or fall back to bootstrap values
+          $ResourceGroupName = "${{ github.event.inputs.resource_group_name }}".Trim()
+          if (-not $ResourceGroupName) { 
+            $ResourceGroupName = "${{ needs.bootstrap.outputs.rg }}".Trim()
+          }
+
+          $KeyVaultName = "${{ github.event.inputs.key_vault_name }}".Trim()
+          if (-not $KeyVaultName) { 
+            $KeyVaultName = "${{ needs.bootstrap.outputs.kv }}".Trim()
+          }
+
+          $KeyName = "${{ github.event.inputs.key_name }}".Trim()
+          $SecretName = "${{ github.event.inputs.secret_name }}".Trim()
+
+          $AppObjectId = "${{ secrets.APP_OBJECT_ID }}"
+
+          # Fail early
           if (-not $ResourceGroupName) { Write-Error "ResourceGroupName is empty"; exit 1 }
           if (-not $KeyVaultName) { Write-Error "KeyVaultName is empty"; exit 1 }
-  
-          # Pass Azure env to script
+
+          Write-Host "Using RG: $ResourceGroupName"
+          Write-Host "Using KV: $KeyVaultName"
+          Write-Host "Key Name: $KeyName"
+          Write-Host "Secret Name: $SecretName"
+
+          # Pass Azure environment
           $env:AZURE_CLIENT_ID = "${{ secrets.AZURE_CLIENT_ID }}"
           $env:AZURE_CLIENT_SECRET = "${{ secrets.AZURE_CLIENT_SECRET }}"
           $env:AZURE_TENANT_ID = "${{ secrets.AZURE_TENANT_ID }}"
           $env:AZURE_SUBSCRIPTION_ID = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-  
-          # Run provisioning
-          ./scripts/provision.ps1 -ResourceGroupName $ResourceGroupName -KeyVaultName $KeyVaultName -AppObjectId $AppObjectId
+
+          # Run provisioning script
+          ./scripts/provision.ps1 `
+            -ResourceGroupName $ResourceGroupName `
+            -KeyVaultName $KeyVaultName `
+            -KeyName $KeyName `
+            -SecretName $SecretName `
+            -AppObjectId $AppObjectId
