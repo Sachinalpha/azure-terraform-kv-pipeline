@@ -1,11 +1,6 @@
 variable "resource_group_name" {
   type    = string
-  default = "BuddyRg008"
-}
-
-variable ""key_vault_name"" {
-  type    = string
-  default = "keyvault452"
+  default = "poc21-rg321"
 }
 
 variable "location" {
