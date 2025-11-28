@@ -4,19 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       resource_group_name:
-        description: "Resource Group name"
+        description: "Resource Group Name"
         required: false
         type: string
       key_vault_name:
-        description: "Key Vault name"
+        description: "Key Vault Name"
         required: false
         type: string
       key_name:
-        description: "Key name to configure in Key Vault"
+        description: "Key Name to create"
         required: false
         type: string
       secret_name:
-        description: "Secret name to configure in Key Vault"
+        description: "Secret Name to create"
         required: false
         type: string
 
@@ -25,14 +25,13 @@ permissions:
 
 jobs:
   bootstrap:
-    name: Bootstrap RG + Key Vault
     runs-on: ubuntu-latest
     outputs:
       rg: ${{ steps.capture.outputs.rg }}
       kv: ${{ steps.capture.outputs.kv }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Azure Login
@@ -44,27 +43,27 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: Terraform Init (bootstrap)
+      - name: Terraform Init
         working-directory: terraform-bootstrap
         run: terraform init
 
-      - name: Pass Azure credentials to Terraform
+      - name: Create tfvars
         working-directory: terraform-bootstrap
         run: |
           cat << EOF > tf.auto.tfvars
-          client_id           = "${{ secrets.AZURE_CLIENT_ID }}"
-          client_secret       = "${{ secrets.AZURE_CLIENT_SECRET }}"
-          tenant_id           = "${{ secrets.AZURE_TENANT_ID }}"
-          subscription_id     = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          resource_group_name = "${{ github.event.inputs.resource_group_name }}"
-          key_vault_name      = "${{ github.event.inputs.key_vault_name }}"
+          client_id="${{ secrets.AZURE_CLIENT_ID }}"
+          client_secret="${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant_id="${{ secrets.AZURE_TENANT_ID }}"
+          subscription_id="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          resource_group_name="${{ github.event.inputs.resource_group_name }}"
+          key_vault_name="${{ github.event.inputs.key_vault_name }}"
           EOF
 
-      - name: Terraform Apply (bootstrap)
+      - name: Terraform Apply
         working-directory: terraform-bootstrap
         run: terraform apply -auto-approve
 
-      - name: Capture outputs
+      - name: Capture Outputs
         id: capture
         working-directory: terraform-bootstrap
         run: |
@@ -72,72 +71,23 @@ jobs:
           echo "kv=$(terraform output -raw key_vault_name)" >> $GITHUB_OUTPUT
 
   provisioner:
-    name: Provision Key Vault Settings (PowerShell)
     runs-on: ubuntu-latest
     needs: bootstrap
-  
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-  
-      - name: Azure Login
+
+      - name: Login to Azure
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
           auth-type: SERVICE_PRINCIPAL
-  
+
       - name: Install Az Module
         shell: pwsh
-        run: |
-          Install-Module -Name Az -Scope CurrentUser -Force -AllowClobber
-          Import-Module Az
+        run: Install-Module -Name Az -Force -Scope CurrentUser -AllowClobber
 
-      - name: Debug inputs + outputs
+      - name: Run Provisioning (single line)
         shell: pwsh
-        run: |
-          Write-Host "User RG Input: '${{ github.event.inputs.resource_group_name }}'"
-          Write-Host "User KV Input: '${{ github.event.inputs.key_vault_name }}'"
-          Write-Host "Captured RG Output: '${{ needs.bootstrap.outputs.rg }}'"
-          Write-Host "Captured KV Output: '${{ needs.bootstrap.outputs.kv }}'"
-
-      - name: Run PowerShell provisioning
-        shell: pwsh
-        run: |
-          # Use user-input overrides or fall back to bootstrap values
-          $ResourceGroupName = "${{ github.event.inputs.resource_group_name }}".Trim()
-          if (-not $ResourceGroupName) { 
-            $ResourceGroupName = "${{ needs.bootstrap.outputs.rg }}".Trim()
-          }
-
-          $KeyVaultName = "${{ github.event.inputs.key_vault_name }}".Trim()
-          if (-not $KeyVaultName) { 
-            $KeyVaultName = "${{ needs.bootstrap.outputs.kv }}".Trim()
-          }
-
-          $KeyName = "${{ github.event.inputs.key_name }}".Trim()
-          $SecretName = "${{ github.event.inputs.secret_name }}".Trim()
-
-          $AppObjectId = "${{ secrets.APP_OBJECT_ID }}"
-
-          # Fail early
-          if (-not $ResourceGroupName) { Write-Error "ResourceGroupName is empty"; exit 1 }
-          if (-not $KeyVaultName) { Write-Error "KeyVaultName is empty"; exit 1 }
-
-          Write-Host "Using RG: $ResourceGroupName"
-          Write-Host "Using KV: $KeyVaultName"
-          Write-Host "Key Name: $KeyName"
-          Write-Host "Secret Name: $SecretName"
-
-          # Pass Azure environment
-          $env:AZURE_CLIENT_ID = "${{ secrets.AZURE_CLIENT_ID }}"
-          $env:AZURE_CLIENT_SECRET = "${{ secrets.AZURE_CLIENT_SECRET }}"
-          $env:AZURE_TENANT_ID = "${{ secrets.AZURE_TENANT_ID }}"
-          $env:AZURE_SUBSCRIPTION_ID = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-          # Run provisioning script
-          ./scripts/provision.ps1 `
-            -ResourceGroupName $ResourceGroupName `
-            -KeyVaultName $KeyVaultName `
-            -KeyName $KeyName `
-            -SecretName $SecretName `
-            -AppObjectId $AppObjectId
+        run: $rg="${{ github.event.inputs.resource_group_name }}".Trim();if(!$rg){$rg="${{ needs.bootstrap.outputs.rg }}".Trim()};$kv="${{ github.event.inputs.key_vault_name }}".Trim();if(!$kv){$kv="${{ needs.bootstrap.outputs.kv }}".Trim()};$key="${{ github.event.inputs.key_name }}".Trim();if(!$key){$key="app-key"};$secret="${{ github.event.inputs.secret_name }}".Trim();if(!$secret){$secret="app-secret"};$env:AZURE_CLIENT_ID="${{ secrets.AZURE_CLIENT_ID }}";$env:AZURE_CLIENT_SECRET="${{ secrets.AZURE_CLIENT_SECRET }}";$env:AZURE_TENANT_ID="${{ secrets.AZURE_TENANT_ID }}";$env:AZURE_SUBSCRIPTION_ID="${{ secrets.AZURE_SUBSCRIPTION_ID }}";./scripts/provision.ps1 -ResourceGroupName $rg -KeyVaultName $kv -AppObjectId "${{ secrets.APP_OBJECT_ID }}" -KeyName $key -SecretName $secret
