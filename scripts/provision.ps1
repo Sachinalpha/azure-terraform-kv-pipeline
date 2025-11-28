@@ -6,7 +6,13 @@ param(
     [string]$KeyVaultName,
 
     [Parameter(Mandatory = $true)]
-    [string]$AppObjectId
+    [string]$AppObjectId,
+
+    [Parameter(Mandatory = $false)]
+    [string]$KeyName = "app-key",          # Default value
+
+    [Parameter(Mandatory = $false)]
+    [string]$SecretName = "app-secret"     # Default value
 )
 
 # Install Az if missing
@@ -57,7 +63,7 @@ if (-not $kv) {
 }
 Write-Host "Key Vault exists: $KeyVaultName"
 
-# Key Vault Access Policy (Bypass Graph)
+# Key Vault Access Policy (bypassing validation)
 Write-Host "Setting Access Policy (bypassing validation)..."
 
 Set-AzKeyVaultAccessPolicy -VaultName $KeyVaultName `
@@ -74,21 +80,20 @@ Set-AzKeyVaultAccessPolicy -VaultName $KeyVaultName `
 Write-Host "Access policy applied"
 
 # Key Creation
-$key = Get-AzKeyVaultKey -VaultName $KeyVaultName -Name "app-key" -ErrorAction SilentlyContinue
+$key = Get-AzKeyVaultKey -VaultName $KeyVaultName -Name $KeyName -ErrorAction SilentlyContinue
 
 if (-not $key) {
-    Write-Host "Creating Key Vault key 'app-key'..."
-    Add-AzKeyVaultKey -VaultName $KeyVaultName -Name "app-key" `
+    Write-Host "Creating Key Vault key '$KeyName'..."
+    Add-AzKeyVaultKey -VaultName $KeyVaultName -Name $KeyName `
                       -Destination "Software" `
                       -KeyType "RSA" `
                       -KeySize 2048 `
                       -KeyOps @("encrypt","decrypt","sign","verify")
 } else {
-    Write-Host "Key 'app-key' already exists."
+    Write-Host "Key '$KeyName' already exists."
 }
 
-#Add Tags
-# Check existing tags
+# Tags
 $kv = Get-AzKeyVault -VaultName $KeyVaultName
 
 if ($kv.Tags.Count -eq 0 -or $kv.Tags["env"] -ne "prod") {
@@ -104,27 +109,25 @@ else {
     Write-Host "Key Vault '$KeyVaultName' already has tags."
 }
 
-#Add secrets
-$secretName = "app-secret"
-$existingSecret = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name $secretName -ErrorAction SilentlyContinue
+# Secrets
+$existingSecret = Get-AzKeyVaultSecret -VaultName $KeyVaultName -Name $SecretName -ErrorAction SilentlyContinue
 
 if (-not $existingSecret) {
-    Write-Host "Creating secret '$secretName'..."
+    Write-Host "Creating secret '$SecretName'..."
 
     Set-AzKeyVaultSecret -VaultName $KeyVaultName `
-                         -Name $secretName `
+                         -Name $SecretName `
                          -SecretValue (ConvertTo-SecureString "MySecretValue123" -AsPlainText -Force)
 }
 else {
-    Write-Host "Secret '$secretName' already exists."
+    Write-Host "Secret '$SecretName' already exists."
 }
 
+# Rotation Policy
+Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName -Name $KeyName -ExpiresIn "P90D"
+Write-Host "Rotation policy applied for '$KeyName'"
 
-# # --- Rotation Policy ---
-Set-AzKeyVaultKeyRotationPolicy -VaultName $KeyVaultName -Name "app-key" -ExpiresIn "P90D"
-Write-Host "Rotation policy applied for 'app-key'"
-
-# VNet Creation
+# VNet
 $vnetName = "${ResourceGroupName}-vnet"
 $vnet = Get-AzVirtualNetwork -Name $vnetName -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
 
@@ -155,13 +158,10 @@ $existingPE = Get-AzPrivateEndpoint -Name $peName `
 
 if (-not $existingPE) {
     Write-Host "Creating Private Endpoint $peName..."
-   # $subnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $vnet
-   # Write-Host "$subnet"
+
     $virtualNetwork = Get-AzVirtualNetwork -ResourceName $vnetName -ResourceGroupName  $ResourceGroupName
     $subnet = $virtualNetwork | Select-Object -ExpandProperty subnets | Where-Object Name -eq $subnetName
 
-    Write-Host "$subnet"
-    Write-Host "$virtualNetwork"
     New-AzPrivateEndpoint -Name $peName `
                           -ResourceGroupName $ResourceGroupName `
                           -Location $rg.Location `
