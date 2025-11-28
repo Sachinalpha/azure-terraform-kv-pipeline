@@ -87,7 +87,7 @@ if (-not $key) {
     Add-AzKeyVaultKey -VaultName $KeyVaultName -Name $KeyName `
                       -Destination "Software" `
                       -KeyType "RSA" `
-                      -KeySize 2048 `
+                      -Size 2048 `
                       -KeyOps @("encrypt","decrypt","sign","verify")
 } else {
     Write-Host "Key '$KeyName' already exists."
