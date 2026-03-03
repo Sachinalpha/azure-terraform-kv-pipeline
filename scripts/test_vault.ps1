@@ -32,32 +32,46 @@ Set-AzContext -SubscriptionId $AzureSubscriptionId | Out-Null
 
 Write-Host "Authentication successful."
 
+# ====================== DETECT RUNNER PUBLIC IP ======================
+Write-Host "Detecting runner public outbound IP..."
+try {
+    $RunnerPublicIP = (Invoke-RestMethod -Uri "https://api.ipify.org").Trim()
+} catch {
+    throw "Unable to detect runner public IP."
+}
+
+if (-not $RunnerPublicIP) {
+    throw "Runner public IP is empty."
+}
+
+Write-Host "Runner Public IP detected: $RunnerPublicIP"
+
 # ====================== FIREWALL FUNCTIONS ======================
 
 function Disable-KeyVaultFirewall($VaultName, $VaultRG) {
-    Write-Host "Disabling firewall completely for: $VaultName"
+    Write-Host "Disabling firewall for: $VaultName (only runner IP will be allowed)"
 
-    # Enable public access
+    # Enable public access temporarily
     Update-AzKeyVault `
         -VaultName $VaultName `
         -ResourceGroupName $VaultRG `
         -PublicNetworkAccess Enabled | Out-Null
 
-    # Allow all IPs
+    # Allow only runner IP
     Add-AzKeyVaultNetworkRule `
         -VaultName $VaultName `
         -ResourceGroupName $VaultRG `
-        -IpAddressRange "10.188.16.33" | Out-Null
+        -IpAddressRange "$RunnerPublicIP/32" | Out-Null
 }
 
 function Enable-KeyVaultFirewall($VaultName, $VaultRG) {
     Write-Host "Re-enabling firewall for: $VaultName"
 
-    # Remove allow-all rule
+    # Remove only runner IP
     Remove-AzKeyVaultNetworkRule `
         -VaultName $VaultName `
         -ResourceGroupName $VaultRG `
-        -IpAddressRange "0.0.0.0/0" `
+        -IpAddressRange "$RunnerPublicIP/32" `
         -ErrorAction SilentlyContinue | Out-Null
 
     # Disable public access
@@ -121,7 +135,8 @@ try {
                     -PermissionsToKeys $Policy.PermissionsToKeys `
                     -PermissionsToSecrets $Policy.PermissionsToSecrets `
                     -PermissionsToCertificates $Policy.PermissionsToCertificates `
-                    -PermissionsToStorage $Policy.PermissionsToStorage | Out-Null
+                    -PermissionsToStorage $Policy.PermissionsToStorage `
+                    -BypassObjectIdValidation | Out-Null
 
                 Write-Host "Access policy copied: $($Policy.ObjectId)"
             } catch {
